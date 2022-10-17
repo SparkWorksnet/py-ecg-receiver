@@ -16,7 +16,7 @@ cardio_accelerometer_ch_uuid = '87301807-d487-4fa7-960c-27955f3e4c2c'
 cardio_features_c_uuid = '8730180c-d487-4fa7-960c-27955f3e4c2c'
 
 
-async def connect(d, record_ecg=True, record_acc=False, record_time=120.0):
+async def connect(d, record_ecg=True, record_acc=True, record_time=120.0):
     """
     Connects to the ECG device and records an ECG recording
     :param d: the ECG device
@@ -40,7 +40,7 @@ async def connect(d, record_ecg=True, record_acc=False, record_time=120.0):
                 process_ecg_data(data, file=ecg_file)
 
             def acc_callback(sender, data):
-                process_accelerometer_data(data, file=ecg_file)
+                process_accelerometer_data(data, file=acc_file)
 
             await client.start_notify(battery_c_uuid, battery_callback)
             if record_ecg:
