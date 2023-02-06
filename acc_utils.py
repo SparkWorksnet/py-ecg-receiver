@@ -7,12 +7,11 @@ recording_timestamp = -1
 sample_interval_millis = 1000.0 / 100.0
 
 
-def write_sample_to_file(sample_time, data, file=None, verbose=False):
+def convert_sample_to_line(sample_time, data, verbose=False):
     """
-    Write a sample's data to the recording's file
+    Convert an accelerometer sample to a data line
     :param sample_time: the timestamp of this sample
     :param data: the accelerometer data
-    :param file: the file where data are stored
     :param verbose: flag used to show data in terminal
     """
     values = [sample_time]
@@ -20,11 +19,31 @@ def write_sample_to_file(sample_time, data, file=None, verbose=False):
     line = ','.join([str(i) for i in values])
     if verbose:
         logging.info(line)
+    return line
+
+
+def write_sample_to_file(data_line, file=None):
+    """
+    Write a sample's data to the recording's file
+    :param data_line: the line of data to store
+    :param file: the file where data are stored
+    """
     if file is not None:
-        file.write(line + '\n')
+        file.write(data_line + '\n')
 
 
-def process_accelerometer_data(data, file=None):
+def write_sample_to_mqtt(data_line, mqtt_client=None, mqtt_topic=None):
+    """
+    Write a sample's data to the recording's file
+    :param data_line: the line of data to publish
+    :param mqtt_client: the mqtt client to send the data
+    :param mqtt_topic: the mqtt topic to send the data
+    """
+    if mqtt_client is not None:
+        mqtt_client.publish(f"{mqtt_topic}", data_line)
+
+
+def process_accelerometer_data(data, file=None, mqtt_client=None, mqtt_topic=None):
     """
     Processes the accelerometer data received by the ECG Vest
     :param data: the accelerometer data received
@@ -41,7 +60,9 @@ def process_accelerometer_data(data, file=None):
         for j in [3, 4, 5]:
             index = acc_header_len + frame * acc_data_frame_len + j * 2
             acc_data_sample.append(lsm6dsrx_from_fs250dps_to_dps(data[index + 1], data[index]))
-        write_sample_to_file(recording_timestamp, acc_data_sample, file=file)
+        data_line = convert_sample_to_line(recording_timestamp, acc_data_sample)
+        write_sample_to_file(data_line, file=file)
+        write_sample_to_mqtt(data_line, mqtt_client=mqtt_client, mqtt_topic=f"{mqtt_topic}/acc")
         recording_timestamp += sample_interval_millis
 
 

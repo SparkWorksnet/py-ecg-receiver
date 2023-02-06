@@ -11,17 +11,15 @@ last_packet_received = -1
 recording_timestamp = -1
 
 
-def write_sample_to_file(sample_time, channel_data, avg_qrs=0, avg_qrs_millis=0, is_qrs=0, battery=0, file=None,
-                         verbose=False):
+def convert_sample_to_line(sample_time, channel_data, avg_qrs=0, avg_qrs_millis=0, is_qrs=0, battery=0, verbose=False):
     """
-    Write a sample's data to the recording's file
+    Convert an ecg sample to a data line
     :param sample_time: the timestamp of this sample
     :param channel_data: the 12 ECG channel data
     :param avg_qrs: current qes duration in samples
     :param avg_qrs_millis: current qrs duration in milliseconds
     :param is_qrs: flag that shows if this is the spike of the QRS complex
     :param battery: the battery of the ECG device
-    :param file: the file where data are stored
     :param verbose: flag used to show data in terminal
     """
     values = [sample_time]
@@ -30,8 +28,28 @@ def write_sample_to_file(sample_time, channel_data, avg_qrs=0, avg_qrs_millis=0,
     line = ','.join([str(i) for i in values])
     if verbose:
         logging.info(line)
+    return line
+
+
+def write_sample_to_file(data_line, file=None):
+    """
+    Write a sample's data to the recording's file
+    :param data_line: the line of data to store
+    :param file: the file where data are stored
+    """
     if file is not None:
-        file.write(line + '\n')
+        file.write(data_line + '\n')
+
+
+def write_sample_to_mqtt(data_line, mqtt_client=None, mqtt_topic=None):
+    """
+    Write a sample's data to the recording's file
+    :param data_line: the line of data to publish
+    :param mqtt_client: the mqtt client to send the data
+    :param mqtt_topic: the mqtt topic to send the data
+    """
+    if mqtt_client is not None:
+        mqtt_client.publish(f"{mqtt_topic}", data_line)
 
 
 def write_missing_to_file(current, last, missed, file=None):
@@ -130,11 +148,13 @@ def update_sample_time(sequence_no, file=None):
     last_packet_received = sequence_no
 
 
-def process_ecg_data(data, file=None):
+def process_ecg_data(data, file=None, mqtt_client=None, mqtt_topic=None):
     """
     Processes the ecg data received by the ECG Vest
     :param data: the ecg data received
     :param file: the file where data are stored
+    :param mqtt_client: the mqtt client to send the data
+    :param mqtt_topic: the mqtt topic to send the data
     """
     global recording_timestamp
     packet_sequence_number = data.pop(0)
@@ -164,7 +184,9 @@ def process_ecg_data(data, file=None):
         for i in range(single_sample_length):
             leads.append(int_values.pop(0))
         channel_data = produce_channel_data_from_lead_values(leads)
-        write_sample_to_file(recording_timestamp, channel_data, battery=received_battery, file=file)
+        data_line = convert_sample_to_line(recording_timestamp, channel_data, battery=received_battery)
+        write_sample_to_file(data_line=data_line, file=file)
+        write_sample_to_mqtt(data_line=data_line, mqtt_client=mqtt_client, mqtt_topic=f"{mqtt_topic}/ecg")
         recording_timestamp += sample_interval_millis
 
 

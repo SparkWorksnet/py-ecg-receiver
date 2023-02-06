@@ -16,13 +16,15 @@ cardio_accelerometer_ch_uuid = '87301807-d487-4fa7-960c-27955f3e4c2c'
 cardio_features_c_uuid = '8730180c-d487-4fa7-960c-27955f3e4c2c'
 
 
-async def connect(d, record_ecg=True, record_acc=True, record_time=120.0):
+async def connect(d, record_ecg=True, record_acc=True, record_time=120.0, mqtt_client=None, mqtt_topic=None):
     """
     Connects to the ECG device and records an ECG recording
     :param d: the ECG device
     :param record_ecg: whether to record ECG data or not
     :param record_acc: whether to record ACC data or not
     :param record_time: the duration of the recording
+    :param mqtt_client: the mqtt client to send the data
+    :param mqtt_topic: the mqtt topic to send the data
     """
     client = BleakClient(d.address)
     try:
@@ -37,10 +39,10 @@ async def connect(d, record_ecg=True, record_acc=True, record_time=120.0):
                 process_battery_data(data)
 
             def data_callback(sender, data):
-                process_ecg_data(data, file=ecg_file)
+                process_ecg_data(data, file=ecg_file, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic)
 
             def acc_callback(sender, data):
-                process_accelerometer_data(data, file=acc_file)
+                process_accelerometer_data(data, file=acc_file, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic)
 
             await client.start_notify(battery_c_uuid, battery_callback)
             if record_ecg:
