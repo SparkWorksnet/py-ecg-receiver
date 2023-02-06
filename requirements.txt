@@ -1,0 +1,4 @@
+asyncio
+bleak
+numpy
+paho-mqtt
