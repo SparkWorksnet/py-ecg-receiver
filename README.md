@@ -18,7 +18,7 @@ This repository is used to receive ecg recordings from the Sparks ECG Vest.
 
 ## Outputs
 
-The data collected can be outputed to two sources:
+The data collected can be output to two sources:
 
 * File
 * MQTT
@@ -49,3 +49,7 @@ Using the MQTT output each recording produces new mqtt messages in two MQTT topi
 
 * `{prefix}/{ecg_address}/ecg` : with data regarding ECG information (in the format presented above)
 * `{prefix}/{ecg_address}/acc` : with data regarding Accelerometer information (in the format presented
+
+## Logging
+
+TBD
