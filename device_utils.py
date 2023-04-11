@@ -16,7 +16,8 @@ cardio_accelerometer_ch_uuid = '87301807-d487-4fa7-960c-27955f3e4c2c'
 cardio_features_c_uuid = '8730180c-d487-4fa7-960c-27955f3e4c2c'
 
 
-async def connect(d, record_ecg=True, record_acc=True, record_time=120.0, mqtt_client=None, mqtt_topic=None):
+async def connect(d, record_ecg=True, record_acc=False, record_time=None, mqtt_client=None, mqtt_topic=None,
+                  influxdb_api=None, influxdb_bucket=None):
     """
     Connects to the ECG device and records an ECG recording
     :param d: the ECG device
@@ -25,8 +26,11 @@ async def connect(d, record_ecg=True, record_acc=True, record_time=120.0, mqtt_c
     :param record_time: the duration of the recording
     :param mqtt_client: the mqtt client to send the data
     :param mqtt_topic: the mqtt topic to send the data
+    :param influxdb_api: the influxdb write api to append the data
+    :param influxdb_bucket: the influxdb bucket to append the data
     """
-    client = BleakClient(d.address)
+    logging.info(f'record_time={record_time}')
+    client = BleakClient(d.address, device='hci0')
     try:
         await client.connect()
         filename = f'{int(round(time.time()))}'
@@ -39,7 +43,8 @@ async def connect(d, record_ecg=True, record_acc=True, record_time=120.0, mqtt_c
                 process_battery_data(data)
 
             def data_callback(sender, data):
-                process_ecg_data(data, file=ecg_file, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic)
+                process_ecg_data(data, file=ecg_file, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic,
+                                 influxdb_api=influxdb_api, influxdb_bucket=influxdb_bucket)
 
             def acc_callback(sender, data):
                 process_accelerometer_data(data, file=acc_file, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic)
@@ -51,8 +56,10 @@ async def connect(d, record_ecg=True, record_acc=True, record_time=120.0, mqtt_c
                 await client.write_gatt_char(cardio_command_c_uuid, data=bytes((6,)))
             await client.start_notify(cardio_datastream_c_uuid, data_callback)
             await client.start_notify(cardio_accelerometer_ch_uuid, acc_callback)
-            logging.info(f'recording for {record_time} seconds')
+            start = time.time()
+            logging.info(f'recording for {record_time} seconds, time={time.time()}')
             await asyncio.sleep(record_time)
+            logging.info(f'stopped at time={time.time() - start}')
             if record_ecg:
                 await client.write_gatt_char(cardio_command_c_uuid, data=bytes((3,)))
             if record_acc:
