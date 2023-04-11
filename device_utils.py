@@ -16,11 +16,12 @@ cardio_accelerometer_ch_uuid = '87301807-d487-4fa7-960c-27955f3e4c2c'
 cardio_features_c_uuid = '8730180c-d487-4fa7-960c-27955f3e4c2c'
 
 
-async def connect(d, record_ecg=True, record_acc=False, record_time=None, mqtt_client=None, mqtt_topic=None,
-                  influxdb_api=None, influxdb_bucket=None):
+async def connect(d, bluetooth_device=None, record_ecg=True, record_acc=False, record_time=None, mqtt_client=None,
+                  mqtt_topic=None, influxdb_api=None, influxdb_bucket=None):
     """
     Connects to the ECG device and records an ECG recording
     :param d: the ECG device
+    :param bluetooth_device: the bluetooth device to use
     :param record_ecg: whether to record ECG data or not
     :param record_acc: whether to record ACC data or not
     :param record_time: the duration of the recording
@@ -30,7 +31,7 @@ async def connect(d, record_ecg=True, record_acc=False, record_time=None, mqtt_c
     :param influxdb_bucket: the influxdb bucket to append the data
     """
     logging.info(f'record_time={record_time}')
-    client = BleakClient(d.address, device='hci0')
+    client = BleakClient(d.address, device=bluetooth_device)
     try:
         await client.connect()
         filename = f'{int(round(time.time()))}'

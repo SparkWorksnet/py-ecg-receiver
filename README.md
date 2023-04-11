@@ -5,7 +5,7 @@ This repository is used to receive ecg recordings from the Sparks ECG Vest.
 ## Execution
 
 ````shell
-./record_ecg.py -v -h -n[--name] -s[--scantime] -r[--recordtime] -m[--mqtt] -t[--topic] -i[--influxdb]
+./record_ecg.py -v -h -n[--name] -s[--scantime] -r[--recordtime] -m[--mqtt] -t[--topic] -i[--influxdb] -b[--bluetooth]
 ````
 
 * v : verbose output
@@ -16,6 +16,7 @@ This repository is used to receive ecg recordings from the Sparks ECG Vest.
 * m : mqtt address in the format of `host:port`
 * t : mqtt topic prefix
 * i : influxdb address in the format of `scheme://host:port/database`
+* b : the bluetooth device to use e.g., `hci0`
 
 ## Outputs
 

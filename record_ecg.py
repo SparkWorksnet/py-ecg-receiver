@@ -11,14 +11,15 @@ from influxdb_client.client.write_api import ASYNCHRONOUS
 
 from device_utils import connect
 
-help_line = 'record_ecg.py -n <name> -d <device> -s <scantime> -r <recordtime> -m <mqtt_url> -t <mqtt_topic> -i <influxdb>'
+help_line = 'record_ecg.py -n <name> -d <device> -s <scantime> -r <recordtime> -m <mqtt_url> -t <mqtt_topic> -i <influxdb> -b <bluetooth>'
 
 
-async def start_connection(d, record_time, mqtt_client, mqtt_topic, influxdb_api, influxdb_bucket):
+async def start_connection(d, record_time, bluetooth_device, mqtt_client, mqtt_topic, influxdb_api, influxdb_bucket):
     """
     Start connection to ECG device
     :param d: the ECG device
     :param record_time: the duration of the recording
+    :param bluetooth_device: the bluetooth device to use
     :param mqtt_client: the mqtt client to send the data
     :param mqtt_topic: the mqtt topic to send the data
     :param influxdb_api: the influxdb write api to append the data
@@ -27,11 +28,12 @@ async def start_connection(d, record_time, mqtt_client, mqtt_topic, influxdb_api
     services_detected = d.metadata['uuids']
     logging.info(
         f'starting connection for: {record_time} to: {d.name}[{d.address}], rssi:{d.rssi}, services:{services_detected}')
-    await connect(d, record_time=record_time, mqtt_client=mqtt_client, mqtt_topic=mqtt_topic, influxdb_api=influxdb_api,
-                  influxdb_bucket=influxdb_bucket)
+    await connect(d, bluetooth_device=bluetooth_device, record_time=record_time, mqtt_client=mqtt_client,
+                  mqtt_topic=mqtt_topic, influxdb_api=influxdb_api, influxdb_bucket=influxdb_bucket)
 
 
 async def main(argv):
+    bluetooth = None
     device_name = 'ECG2.0-n'
     device_address = None
     scan_time = 5.0
@@ -43,8 +45,9 @@ async def main(argv):
 
     logging.basicConfig(level=logging.INFO)
     try:
-        opts, args = getopt.getopt(argv, "vhn:d:s:r:m:t:i:",
-                                   ["name=", "device=", "scantime=", "recordtime=", "mqtt=", "topic=", "influxdb="])
+        opts, args = getopt.getopt(argv, "vhn:d:s:r:m:t:i:b:",
+                                   ["name=", "device=", "scantime=", "recordtime=", "mqtt=", "topic=", "influxdb=",
+                                    "bluetooth="])
     except getopt.GetoptError:
         logging.error(help_line)
         sys.exit(2)
@@ -52,6 +55,8 @@ async def main(argv):
         if opt == '-h':
             logging.info(help_line)
             sys.exit()
+        elif opt in ('-b', '--bluetooth'):
+            bluetooth = arg
         elif opt in ('-n', '--name'):
             device_name = arg
         elif opt in ('-d', '--device'):
@@ -97,13 +102,15 @@ async def main(argv):
         for d in scanner.discovered_devices:
             if device_address is None and d.name is not None and d.name == device_name:
                 connected_device = d
-                await start_connection(d, record_time, mqtt_client=client, mqtt_topic=f'{topic}/{d.address}',
-                                       influxdb_api=influxdb_write_api, influxdb_bucket=influxdb_database)
+                await start_connection(d, record_time, bluetooth_device=bluetooth, mqtt_client=client,
+                                       mqtt_topic=f'{topic}/{d.address}', influxdb_api=influxdb_write_api,
+                                       influxdb_bucket=influxdb_database)
                 break
             elif device_address is not None and d.address is not None and d.address == device_address:
                 connected_device = d
-                await start_connection(d, record_time, mqtt_client=client, mqtt_topic=f'{topic}/{d.address}',
-                                       influxdb_api=influxdb_write_api, influxdb_bucket=influxdb_database)
+                await start_connection(d, record_time, bluetooth_device=bluetooth, mqtt_client=client,
+                                       mqtt_topic=f'{topic}/{d.address}', influxdb_api=influxdb_write_api,
+                                       influxdb_bucket=influxdb_database)
                 break
         if connected_device is None:
             logging.error(f'Failed to find any device to connect!')
