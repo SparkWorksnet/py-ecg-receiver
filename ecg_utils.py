@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+import datetime
 
 int_values = []
 single_sample_length = 8
@@ -8,10 +9,12 @@ sample_interval_millis = 1000.0 / 500.0
 received_battery = 0
 
 last_packet_received = -1
+recording_start = -1
 recording_timestamp = -1
 
 
-def convert_sample_to_line(sample_time, channel_data, avg_qrs=0, avg_qrs_millis=0, is_qrs=0, battery=0, verbose=False):
+def convert_sample_to_line(start_time, sample_time, channel_data, avg_qrs=0, avg_qrs_millis=0, is_qrs=0, battery=0,
+                           verbose=False):
     """
     Convert an ecg sample to a data line
     :param sample_time: the timestamp of this sample
@@ -22,7 +25,7 @@ def convert_sample_to_line(sample_time, channel_data, avg_qrs=0, avg_qrs_millis=
     :param battery: the battery of the ECG device
     :param verbose: flag used to show data in terminal
     """
-    values = [sample_time]
+    values = [start_time + sample_time, sample_time]
     values.extend(channel_data)
     values.extend([avg_qrs, avg_qrs_millis, is_qrs, battery])
     line = ','.join([str(i) for i in values])
@@ -118,14 +121,14 @@ def update_sample_time(sequence_no, file=None):
     :param sequence_no: the sequence number of the currently processed packet
     :param file: the file where data are stored
     """
-    global recording_timestamp, last_packet_received
+    global recording_start, recording_timestamp, last_packet_received
     if recording_timestamp == -1:
         recording_timestamp = 0
+        recording_start = int(datetime.datetime.now().timestamp() * 1000)
 
     missing_count = 0
 
     was_last_packet_received = last_packet_received
-
     if ((sequence_no != 0 or last_packet_received != 254)
             and (sequence_no != (last_packet_received + 1))):
         if sequence_no > last_packet_received:
@@ -148,15 +151,17 @@ def update_sample_time(sequence_no, file=None):
     last_packet_received = sequence_no
 
 
-def process_ecg_data(data, file=None, mqtt_client=None, mqtt_topic=None):
+def process_ecg_data(data, file=None, mqtt_client=None, mqtt_topic=None, influxdb_api=None, influxdb_bucket=None):
     """
     Processes the ecg data received by the ECG Vest
     :param data: the ecg data received
     :param file: the file where data are stored
     :param mqtt_client: the mqtt client to send the data
     :param mqtt_topic: the mqtt topic to send the data
+    :param influxdb_api: the influxdb write api to append the data
+    :param influxdb_bucket: the influxdb bucket to append the data
     """
-    global recording_timestamp
+    global recording_start, recording_timestamp
     packet_sequence_number = data.pop(0)
     update_sample_time(packet_sequence_number, file)
 
@@ -178,16 +183,61 @@ def process_ecg_data(data, file=None, mqtt_client=None, mqtt_topic=None):
 
     new_int_values = [int(m, base=16) for m in measurements]
     int_values.extend(new_int_values)
-
+    send = 0
+    meas = []
     while len(int_values) > single_sample_length:
         leads = []
         for i in range(single_sample_length):
             leads.append(int_values.pop(0))
         channel_data = produce_channel_data_from_lead_values(leads)
-        data_line = convert_sample_to_line(recording_timestamp, channel_data, battery=received_battery)
+        data_line = convert_sample_to_line(recording_start, recording_timestamp, channel_data, battery=received_battery)
+        # file
         write_sample_to_file(data_line=data_line, file=file)
+        # mqtt
         write_sample_to_mqtt(data_line=data_line, mqtt_client=mqtt_client, mqtt_topic=f"{mqtt_topic}/ecg")
+        # influxdb
+        if influxdb_api is not None and influxdb_bucket is not None:
+            meas.append(prepare_sample_for_influx(recording_start + recording_timestamp,
+                                                  voltage_from_channel_data(channel_data)))
         recording_timestamp += sample_interval_millis
+    # influxdb
+    if influxdb_api is not None and influxdb_bucket is not None:
+        influxdb_api.write(bucket=influxdb_bucket, record=meas)
+
+
+def voltage_from_channel_data(channel_data):
+    """
+    Converts channel data to voltage based on adc configuration
+    :param channel_data: the adc raw data
+    :return:  the converted voltage data per channel
+    """
+    return {
+        'I': ((channel_data[0] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'II': ((channel_data[1] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'III': ((channel_data[2] * 3600.0) / 4095) / 1000,
+        'aVR': ((channel_data[3] * 3600.0) / 4095) / 1000,
+        'aVL': ((channel_data[4] * 3600.0) / 4095) / 1000,
+        'aVF': ((channel_data[5] * 3600.0) / 4095) / 1000,
+        'V1': ((channel_data[6] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'V2': ((channel_data[7] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'V3': ((channel_data[8] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'V4': ((channel_data[9] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'V5': ((channel_data[10] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'V6': ((channel_data[11] * 3600.0) / 4095 - 1800.43956) / 1000,
+        'HR': 65.0,
+        'RR': 73.0,
+        'STATE': 0.0
+    }
+
+
+def prepare_sample_for_influx(recording_time, voltage_data):
+    """
+    prepares the sample to be written in the influxdb, and generates mV values from channel data
+    :param recording_time:
+    :param voltage_data:
+    :return:
+    """
+    return {"measurement": "ecg", "time": int(recording_time * 1000000), "fields": voltage_data}
 
 
 def set_battery(battery):
@@ -206,5 +256,9 @@ def process_battery_data(data):
     :param data: the battery data received
     """
     global received_battery
-    received_battery = int.from_bytes(data[0], "big")
-    logging.info(f'Battery: {received_battery}')
+    # todo: check this error
+    try:
+        received_battery = int.from_bytes(data[0], "big")
+        logging.info(f'Battery: {received_battery}')
+    except:
+        pass
