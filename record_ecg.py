@@ -71,7 +71,7 @@ async def main(argv):
             parts = arg.split('/')
             if 'http://' in arg or 'https://' in arg:
                 influxdb_address = parts[0] + '//' + parts[2]
-                influxdb_database = parts[1]
+                influxdb_database = parts[3]
             else:
                 influxdb_address = parts[0]
                 influxdb_database = parts[1]
